@@ -10,6 +10,8 @@
     table { border-collapse: collapse; width: 100%; font-size: 12px; overflow-x: auto; display: block; }
     th, td { border: 1px solid #ccc; padding: 4px; text-align: left; white-space: nowrap; }
     th { cursor: pointer; background: #f9f9f9; }
+    th.sorted-asc::after { content: " ↑"; }
+    th.sorted-desc::after { content: " ↓"; }
     input { margin: 5px; padding: 5px; }
   </style>
 </head>
@@ -40,26 +42,29 @@
     let filteredData = [];
     let sortDirection = 1;
     let columns = [];
+    let currentSortColumn = null;
+    let currentSortDirection = 1;
 
-    const positionMap = {
-      1: "GK",
-      2: "DEF",
-      3: "MID",
-      4: "FWD"
-    };
+    const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
     async function loadData(file) {
       const response = await fetch(file);
       data = await response.json();
-      columns = Object.keys(data[0]); // get all columns dynamically
-      filteredData = [...data]; // start with all rows
+      columns = Object.keys(data[0]);
+      filteredData = [...data];
       renderHeader();
       renderTable(filteredData);
     }
 
     function renderHeader() {
       document.getElementById('table-head').innerHTML =
-        `<tr>${columns.map(c => `<th onclick="sortTable('${c}')">${c}</th>`).join('')}</tr>`;
+        `<tr>${columns.map(c => {
+          let cls = "";
+          if (c === currentSortColumn) {
+            cls = currentSortDirection === 1 ? "sorted-asc" : "sorted-desc";
+          }
+          return `<th class="${cls}" onclick="sortTable('${c}')">${c}</th>`;
+        }).join('')}</tr>`;
     }
 
     function renderTable(rows) {
@@ -68,15 +73,16 @@
           `<tr>${columns.map(c => {
             let val = r[c];
             if (c === "position") {
-              val = positionMap[val] || val; // map integer to string
+              val = positionMap[val] || val;
             } else if (c === "minutes") {
-              val = Math.round(val); // round minutes to integer
+              val = Math.round(val);
             } else if (typeof val === 'number') {
-              val = Number(val).toFixed(2); // two decimals for other numbers
+              val = Number(val).toFixed(2);
             }
             return `<td>${val}</td>`;
           }).join('')}</tr>`
         ).join('');
+      renderHeader(); // refresh header to show sort indicator
     }
 
     function applyFilters() {
@@ -100,6 +106,9 @@
     document.getElementById('minutesFilter').addEventListener('input', applyFilters);
 
     function sortTable(column) {
+      currentSortColumn = column;
+      currentSortDirection = sortDirection;
+
       filteredData.sort((a, b) => {
         const valA = a[column], valB = b[column];
         if (typeof valA === 'number' && typeof valB === 'number') {
@@ -115,7 +124,11 @@
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       el.classList.add('active');
       await loadData(file);
-      applyFilters(); // re-apply filters after loading new data
+      applyFilters();
+      if (currentSortColumn) {
+        sortDirection = currentSortDirection;
+        sortTable(currentSortColumn);
+      }
     }
 
     // Load default tab (1 week)
