@@ -37,6 +37,7 @@
 
   <script>
     let data = [];
+    let filteredData = [];
     let sortDirection = 1;
     let columns = [];
 
@@ -44,8 +45,9 @@
       const response = await fetch(file);
       data = await response.json();
       columns = Object.keys(data[0]); // get all columns dynamically
+      filteredData = [...data]; // start with all rows
       renderHeader();
-      renderTable(data);
+      renderTable(filteredData);
     }
 
     function renderHeader() {
@@ -53,9 +55,9 @@
         `<tr>${columns.map(c => `<th onclick="sortTable('${c}')">${c}</th>`).join('')}</tr>`;
     }
 
-    function renderTable(filteredData) {
+    function renderTable(rows) {
       document.getElementById('results').innerHTML =
-        filteredData.map(r =>
+        rows.map(r =>
           `<tr>${columns.map(c => {
             const val = r[c];
             return `<td>${typeof val === 'number' ? Number(val).toFixed(2) : val}</td>`;
@@ -69,13 +71,13 @@
       const posQ = document.getElementById('positionFilter').value.toLowerCase();
       const minMinutes = parseInt(document.getElementById('minutesFilter').value) || 0;
 
-      const results = data.filter(item =>
+      filteredData = data.filter(item =>
         item.web_name.toLowerCase().includes(nameQ) &&
         item.team.toLowerCase().includes(teamQ) &&
         String(item.position).toLowerCase().includes(posQ) &&
         item.minutes >= minMinutes
       );
-      renderTable(results);
+      renderTable(filteredData);
     }
 
     document.getElementById('nameFilter').addEventListener('input', applyFilters);
@@ -84,7 +86,7 @@
     document.getElementById('minutesFilter').addEventListener('input', applyFilters);
 
     function sortTable(column) {
-      data.sort((a, b) => {
+      filteredData.sort((a, b) => {
         const valA = a[column], valB = b[column];
         if (typeof valA === 'number' && typeof valB === 'number') {
           return (valA - valB) * sortDirection;
@@ -92,7 +94,7 @@
         return (valA > valB ? 1 : -1) * sortDirection;
       });
       sortDirection *= -1;
-      renderTable(data);
+      renderTable(filteredData);
     }
 
     function switchTab(file, el) {
