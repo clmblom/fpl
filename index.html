@@ -3,8 +3,8 @@
 <head>
   <title>FPL Predictions</title>
   <style>
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 12px; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
     th { cursor: pointer; background: #f2f2f2; }
     input { margin: 5px; padding: 5px; }
   </style>
@@ -13,20 +13,34 @@
   <h1>FPL Predictions</h1>
 
   <!-- Filters -->
-  <input type="text" id="playerFilter" placeholder="Filter by player">
+  <input type="text" id="nameFilter" placeholder="Filter by player name">
   <input type="text" id="teamFilter" placeholder="Filter by team">
   <input type="text" id="positionFilter" placeholder="Filter by position">
+  <input type="number" id="minutesFilter" placeholder="Min minutes played">
 
   <!-- Table -->
   <table id="fpl-table">
     <thead>
       <tr>
-        <th onclick="sortTable('player')">Player</th>
-        <th onclick="sortTable('team')">Team</th>
+        <th onclick="sortTable('web_name')">Player</th>
         <th onclick="sortTable('position')">Position</th>
+        <th onclick="sortTable('team')">Team</th>
         <th onclick="sortTable('goals')">Goals</th>
+        <th onclick="sortTable('goal_points')">Goal Points</th>
         <th onclick="sortTable('assists')">Assists</th>
-        <th onclick="sortTable('defon')">Defon</th>
+        <th onclick="sortTable('assist_points')">Assist Points</th>
+        <th onclick="sortTable('defcons')">Def Cons</th>
+        <th onclick="sortTable('defcon_points')">Defcon Points</th>
+        <th onclick="sortTable('cs')">Clean Sheets</th>
+        <th onclick="sortTable('cs_points')">CS Points</th>
+        <th onclick="sortTable('gc')">Goals Conceded</th>
+        <th onclick="sortTable('gc_points')">GC Points</th>
+        <th onclick="sortTable('games')">Games</th>
+        <th onclick="sortTable('game_points')">Game Points</th>
+        <th onclick="sortTable('blank')">Blank</th>
+        <th onclick="sortTable('m4')">M4</th>
+        <th onclick="sortTable('points')">Total Points</th>
+        <th onclick="sortTable('minutes')">Minutes</th>
       </tr>
     </thead>
     <tbody id="results"></tbody>
@@ -46,32 +60,48 @@
       document.getElementById('results').innerHTML =
         filteredData.map(r =>
           `<tr>
-            <td>${r.player}</td>
-            <td>${r.team}</td>
+            <td>${r.web_name}</td>
             <td>${r.position}</td>
+            <td>${r.team}</td>
             <td>${r.goals}</td>
+            <td>${r.goal_points}</td>
             <td>${r.assists}</td>
-            <td>${r.defon}</td>
+            <td>${r.assist_points}</td>
+            <td>${r.defcons}</td>
+            <td>${r.defcon_points}</td>
+            <td>${r.cs}</td>
+            <td>${r.cs_points}</td>
+            <td>${r.gc}</td>
+            <td>${r.gc_points}</td>
+            <td>${r.games}</td>
+            <td>${r.game_points}</td>
+            <td>${r.blank}</td>
+            <td>${r.m4}</td>
+            <td>${r.points}</td>
+            <td>${r.minutes}</td>
           </tr>`
         ).join('');
     }
 
     function applyFilters() {
-      const playerQ = document.getElementById('playerFilter').value.toLowerCase();
+      const nameQ = document.getElementById('nameFilter').value.toLowerCase();
       const teamQ = document.getElementById('teamFilter').value.toLowerCase();
       const posQ = document.getElementById('positionFilter').value.toLowerCase();
+      const minMinutes = parseInt(document.getElementById('minutesFilter').value) || 0;
 
       const results = data.filter(item =>
-        item.player.toLowerCase().includes(playerQ) &&
+        item.web_name.toLowerCase().includes(nameQ) &&
         item.team.toLowerCase().includes(teamQ) &&
-        item.position.toLowerCase().includes(posQ)
+        String(item.position).toLowerCase().includes(posQ) &&
+        item.minutes >= minMinutes
       );
       renderTable(results);
     }
 
-    document.getElementById('playerFilter').addEventListener('input', applyFilters);
+    document.getElementById('nameFilter').addEventListener('input', applyFilters);
     document.getElementById('teamFilter').addEventListener('input', applyFilters);
     document.getElementById('positionFilter').addEventListener('input', applyFilters);
+    document.getElementById('minutesFilter').addEventListener('input', applyFilters);
 
     function sortTable(column) {
       data.sort((a, b) => (a[column] > b[column] ? 1 : -1) * sortDirection);
