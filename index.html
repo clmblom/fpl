@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FPL Predictions</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { cursor: pointer; background: #f2f2f2; }
+    input { margin: 5px; padding: 5px; }
+  </style>
+</head>
+<body>
+  <h1>FPL Predictions</h1>
+
+  <!-- Filters -->
+  <input type="text" id="playerFilter" placeholder="Filter by player">
+  <input type="text" id="teamFilter" placeholder="Filter by team">
+  <input type="text" id="positionFilter" placeholder="Filter by position">
+
+  <!-- Table -->
+  <table id="fpl-table">
+    <thead>
+      <tr>
+        <th onclick="sortTable('player')">Player</th>
+        <th onclick="sortTable('team')">Team</th>
+        <th onclick="sortTable('position')">Position</th>
+        <th onclick="sortTable('goals')">Goals</th>
+        <th onclick="sortTable('assists')">Assists</th>
+        <th onclick="sortTable('defon')">Defon</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <script>
+    let data = [];
+    let sortDirection = 1;
+
+    async function loadData() {
+      const response = await fetch('data.json');
+      data = await response.json();
+      renderTable(data);
+    }
+
+    function renderTable(filteredData) {
+      document.getElementById('results').innerHTML =
+        filteredData.map(r =>
+          `<tr>
+            <td>${r.player}</td>
+            <td>${r.team}</td>
+            <td>${r.position}</td>
+            <td>${r.goals}</td>
+            <td>${r.assists}</td>
+            <td>${r.defon}</td>
+          </tr>`
+        ).join('');
+    }
+
+    function applyFilters() {
+      const playerQ = document.getElementById('playerFilter').value.toLowerCase();
+      const teamQ = document.getElementById('teamFilter').value.toLowerCase();
+      const posQ = document.getElementById('positionFilter').value.toLowerCase();
+
+      const results = data.filter(item =>
+        item.player.toLowerCase().includes(playerQ) &&
+        item.team.toLowerCase().includes(teamQ) &&
+        item.position.toLowerCase().includes(posQ)
+      );
+      renderTable(results);
+    }
+
+    document.getElementById('playerFilter').addEventListener('input', applyFilters);
+    document.getElementById('teamFilter').addEventListener('input', applyFilters);
+    document.getElementById('positionFilter').addEventListener('input', applyFilters);
+
+    function sortTable(column) {
+      data.sort((a, b) => (a[column] > b[column] ? 1 : -1) * sortDirection);
+      sortDirection *= -1;
+      renderTable(data);
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
