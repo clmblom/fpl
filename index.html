@@ -97,10 +97,11 @@
       renderTable(filteredData);
     }
 
-    function switchTab(file, el) {
+    async function switchTab(file, el) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       el.classList.add('active');
-      loadData(file);
+      await loadData(file);
+      applyFilters(); // re-apply filters after loading new data
     }
 
     // Load default tab (1 week)
