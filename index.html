@@ -7,8 +7,8 @@
     .tabs { display: flex; margin-bottom: 10px; }
     .tab { padding: 10px; cursor: pointer; border: 1px solid #ccc; }
     .tab.active { background: #f2f2f2; font-weight: bold; }
-    table { border-collapse: collapse; width: 100%; font-size: 12px; }
-    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; overflow-x: auto; display: block; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; white-space: nowrap; }
     th { cursor: pointer; background: #f9f9f9; }
     input { margin: 5px; padding: 5px; }
   </style>
@@ -31,44 +31,35 @@
 
   <!-- Table -->
   <table id="fpl-table">
-    <thead>
-      <tr>
-        <th onclick="sortTable('web_name')">Player</th>
-        <th onclick="sortTable('team')">Team</th>
-        <th onclick="sortTable('position')">Position</th>
-        <th onclick="sortTable('goals')">Goals</th>
-        <th onclick="sortTable('assists')">Assists</th>
-        <th onclick="sortTable('cs')">Clean Sheets</th>
-        <th onclick="sortTable('points')">Total Points</th>
-        <th onclick="sortTable('minutes')">Minutes</th>
-      </tr>
-    </thead>
+    <thead id="table-head"></thead>
     <tbody id="results"></tbody>
   </table>
 
   <script>
     let data = [];
     let sortDirection = 1;
+    let columns = [];
 
     async function loadData(file) {
       const response = await fetch(file);
       data = await response.json();
+      columns = Object.keys(data[0]); // get all columns dynamically
+      renderHeader();
       renderTable(data);
+    }
+
+    function renderHeader() {
+      document.getElementById('table-head').innerHTML =
+        `<tr>${columns.map(c => `<th onclick="sortTable('${c}')">${c}</th>`).join('')}</tr>`;
     }
 
     function renderTable(filteredData) {
       document.getElementById('results').innerHTML =
         filteredData.map(r =>
-          `<tr>
-            <td>${r.web_name}</td>
-            <td>${r.team}</td>
-            <td>${r.position}</td>
-            <td>${Number(r.goals).toFixed(2)}</td>
-            <td>${Number(r.assists).toFixed(2)}</td>
-            <td>${Number(r.cs).toFixed(2)}</td>
-            <td>${Number(r.points).toFixed(2)}</td>
-            <td>${Number(r.minutes).toFixed(2)}</td>
-          </tr>`
+          `<tr>${columns.map(c => {
+            const val = r[c];
+            return `<td>${typeof val === 'number' ? Number(val).toFixed(2) : val}</td>`;
+          }).join('')}</tr>`
         ).join('');
     }
 
@@ -93,7 +84,13 @@
     document.getElementById('minutesFilter').addEventListener('input', applyFilters);
 
     function sortTable(column) {
-      data.sort((a, b) => (a[column] > b[column] ? 1 : -1) * sortDirection);
+      data.sort((a, b) => {
+        const valA = a[column], valB = b[column];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return (valA - valB) * sortDirection;
+        }
+        return (valA > valB ? 1 : -1) * sortDirection;
+      });
       sortDirection *= -1;
       renderTable(data);
     }
