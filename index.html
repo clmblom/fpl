@@ -26,7 +26,7 @@
   <!-- Filters -->
   <input type="text" id="nameFilter" placeholder="Filter by player name">
   <input type="text" id="teamFilter" placeholder="Filter by team">
-  <input type="text" id="positionFilter" placeholder="Filter by position">
+  <input type="text" id="positionFilter" placeholder="Filter by position (GK/DEF/MID/FWD)">
   <input type="number" id="minutesFilter" placeholder="Min minutes played">
 
   <!-- Table -->
@@ -40,6 +40,13 @@
     let filteredData = [];
     let sortDirection = 1;
     let columns = [];
+
+    const positionMap = {
+      1: "GK",
+      2: "DEF",
+      3: "MID",
+      4: "FWD"
+    };
 
     async function loadData(file) {
       const response = await fetch(file);
@@ -59,8 +66,15 @@
       document.getElementById('results').innerHTML =
         rows.map(r =>
           `<tr>${columns.map(c => {
-            const val = r[c];
-            return `<td>${typeof val === 'number' ? Number(val).toFixed(2) : val}</td>`;
+            let val = r[c];
+            if (c === "position") {
+              val = positionMap[val] || val; // map integer to string
+            } else if (c === "minutes") {
+              val = Math.round(val); // round minutes to integer
+            } else if (typeof val === 'number') {
+              val = Number(val).toFixed(2); // two decimals for other numbers
+            }
+            return `<td>${val}</td>`;
           }).join('')}</tr>`
         ).join('');
     }
@@ -74,7 +88,7 @@
       filteredData = data.filter(item =>
         item.web_name.toLowerCase().includes(nameQ) &&
         item.team.toLowerCase().includes(teamQ) &&
-        String(item.position).toLowerCase().includes(posQ) &&
+        String(positionMap[item.position] || item.position).toLowerCase().includes(posQ) &&
         item.minutes >= minMinutes
       );
       renderTable(filteredData);
