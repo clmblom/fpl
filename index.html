@@ -13,6 +13,7 @@
     th.sorted-asc::after { content: " ↑"; }
     th.sorted-desc::after { content: " ↓"; }
     input { margin: 5px; padding: 5px; }
+    #lastUpdated { margin: 10px 0; font-style: italic; color: #555; }
   </style>
 </head>
 <body>
@@ -30,6 +31,9 @@
   <input type="text" id="teamFilter" placeholder="Filter by team">
   <input type="text" id="positionFilter" placeholder="Filter by position (GK/DEF/MID/FWD)">
   <input type="number" id="minutesFilter" placeholder="Min minutes played">
+
+  <!-- Timestamp -->
+  <p id="lastUpdated"></p>
 
   <!-- Table -->
   <table id="fpl-table">
@@ -49,7 +53,19 @@
 
     async function loadData(file) {
       const response = await fetch(file);
-      data = await response.json();
+      const json = await response.json();
+
+      // If JSON has metadata, use it
+      if (json.metadata && json.metadata.last_updated) {
+        document.getElementById("lastUpdated").textContent =
+          "Last updated: " + new Date(json.metadata.last_updated).toLocaleString();
+        data = json.records;
+      } else {
+        data = json;
+        document.getElementById("lastUpdated").textContent =
+          "Last updated: " + new Date().toLocaleString();
+      }
+
       columns = Object.keys(data[0]);
       filteredData = [...data];
       renderHeader();
