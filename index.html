@@ -3,14 +3,25 @@
 <head>
   <title>FPL Predictions</title>
   <style>
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 12px; }
+    body { font-family: Arial, sans-serif; }
+    .tabs { display: flex; margin-bottom: 10px; }
+    .tab { padding: 10px; cursor: pointer; border: 1px solid #ccc; }
+    .tab.active { background: #f2f2f2; font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
     th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
-    th { cursor: pointer; background: #f2f2f2; }
+    th { cursor: pointer; background: #f9f9f9; }
     input { margin: 5px; padding: 5px; }
   </style>
 </head>
 <body>
   <h1>FPL Predictions</h1>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('data_1w.json', this)">1 Week</div>
+    <div class="tab" onclick="switchTab('data_3w.json', this)">3 Weeks</div>
+    <div class="tab" onclick="switchTab('data_5w.json', this)">5 Weeks</div>
+  </div>
 
   <!-- Filters -->
   <input type="text" id="nameFilter" placeholder="Filter by player name">
@@ -23,22 +34,11 @@
     <thead>
       <tr>
         <th onclick="sortTable('web_name')">Player</th>
-        <th onclick="sortTable('position')">Position</th>
         <th onclick="sortTable('team')">Team</th>
+        <th onclick="sortTable('position')">Position</th>
         <th onclick="sortTable('goals')">Goals</th>
-        <th onclick="sortTable('goal_points')">Goal Points</th>
         <th onclick="sortTable('assists')">Assists</th>
-        <th onclick="sortTable('assist_points')">Assist Points</th>
-        <th onclick="sortTable('defcons')">Def Cons</th>
-        <th onclick="sortTable('defcon_points')">Defcon Points</th>
         <th onclick="sortTable('cs')">Clean Sheets</th>
-        <th onclick="sortTable('cs_points')">CS Points</th>
-        <th onclick="sortTable('gc')">Goals Conceded</th>
-        <th onclick="sortTable('gc_points')">GC Points</th>
-        <th onclick="sortTable('games')">Games</th>
-        <th onclick="sortTable('game_points')">Game Points</th>
-        <th onclick="sortTable('blank')">Blank</th>
-        <th onclick="sortTable('m4')">M4</th>
         <th onclick="sortTable('points')">Total Points</th>
         <th onclick="sortTable('minutes')">Minutes</th>
       </tr>
@@ -50,8 +50,8 @@
     let data = [];
     let sortDirection = 1;
 
-    async function loadData() {
-      const response = await fetch('data.json');
+    async function loadData(file) {
+      const response = await fetch(file);
       data = await response.json();
       renderTable(data);
     }
@@ -61,24 +61,13 @@
         filteredData.map(r =>
           `<tr>
             <td>${r.web_name}</td>
-            <td>${r.position}</td>
             <td>${r.team}</td>
-            <td>${r.goals}</td>
-            <td>${r.goal_points}</td>
-            <td>${r.assists}</td>
-            <td>${r.assist_points}</td>
-            <td>${r.defcons}</td>
-            <td>${r.defcon_points}</td>
-            <td>${r.cs}</td>
-            <td>${r.cs_points}</td>
-            <td>${r.gc}</td>
-            <td>${r.gc_points}</td>
-            <td>${r.games}</td>
-            <td>${r.game_points}</td>
-            <td>${r.blank}</td>
-            <td>${r.m4}</td>
-            <td>${r.points}</td>
-            <td>${r.minutes}</td>
+            <td>${r.position}</td>
+            <td>${Number(r.goals).toFixed(2)}</td>
+            <td>${Number(r.assists).toFixed(2)}</td>
+            <td>${Number(r.cs).toFixed(2)}</td>
+            <td>${Number(r.points).toFixed(2)}</td>
+            <td>${Number(r.minutes).toFixed(2)}</td>
           </tr>`
         ).join('');
     }
@@ -109,7 +98,14 @@
       renderTable(data);
     }
 
-    loadData();
+    function switchTab(file, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      loadData(file);
+    }
+
+    // Load default tab (1 week)
+    loadData('data_1w.json');
   </script>
 </body>
 </html>
