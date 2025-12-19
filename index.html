@@ -14,6 +14,16 @@
     th.sorted-desc::after { content: " ↓"; }
     input { margin: 5px; padding: 5px; }
     #lastUpdated { margin: 10px 0; font-style: italic; color: #555; }
+
+    /* ✅ Highlight selected row */
+    .selected-row {
+      background-color: #fff3cd !important; /* light yellow */
+    }
+
+    /* ✅ Zebra striping (does NOT override selected row) */
+    #results tr:nth-child(even):not(.selected-row) {
+      background-color: #f7f7f7;
+    }
   </style>
 </head>
 <body>
@@ -55,7 +65,6 @@
       const response = await fetch(file);
       const json = await response.json();
 
-      // If JSON has metadata, use it
       if (json.metadata && json.metadata.last_updated) {
         document.getElementById("lastUpdated").textContent =
           "Last updated: " + new Date(json.metadata.last_updated).toLocaleString();
@@ -85,20 +94,22 @@
 
     function renderTable(rows) {
       document.getElementById('results').innerHTML =
-        rows.map(r =>
-          `<tr>${columns.map(c => {
-            let val = r[c];
-            if (c === "position") {
-              val = positionMap[val] || val;
-            } else if (c === "minutes") {
-              val = Math.round(val);
-            } else if (typeof val === 'number') {
-              val = Number(val).toFixed(2);
-            }
-            return `<td>${val}</td>`;
-          }).join('')}</tr>`
+        rows.map((r, idx) =>
+          `<tr data-index="${idx}" onclick="highlightRow(${idx})">
+            ${columns.map(c => {
+              let val = r[c];
+              if (c === "position") {
+                val = positionMap[val] || val;
+              } else if (c === "minutes") {
+                val = Math.round(val);
+              } else if (typeof val === 'number') {
+                val = Number(val).toFixed(2);
+              }
+              return `<td>${val}</td>`;
+            }).join('')}
+          </tr>`
         ).join('');
-      renderHeader(); // refresh header to show sort indicator
+      renderHeader();
     }
 
     function applyFilters() {
@@ -147,7 +158,21 @@
       }
     }
 
-    // Load default tab (1 week)
+    /* ✅ Highlight row on click/tap */
+    function highlightRow(index) {
+      const table = document.getElementById('results');
+      const rows = table.getElementsByTagName('tr');
+
+      for (let r of rows) {
+        r.classList.remove('selected-row');
+      }
+
+      const selected = rows[index];
+      if (selected) {
+        selected.classList.add('selected-row');
+      }
+    }
+
     loadData('data_1w.json');
   </script>
 </body>
