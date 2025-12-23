@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>FPL Predictions</title>
   <style>
     body { font-family: Arial, sans-serif; }
@@ -15,12 +16,10 @@
     input { margin: 5px; padding: 5px; }
     #lastUpdated { margin: 10px 0; font-style: italic; color: #555; }
 
-    /* ✅ Highlight selected row */
     .selected-row {
-      background-color: #fff3cd !important; /* light yellow */
+      background-color: #fff3cd !important;
     }
 
-    /* ✅ Zebra striping (does NOT override selected row) */
     #results tr:nth-child(even):not(.selected-row) {
       background-color: #f7f7f7;
     }
@@ -29,23 +28,19 @@
 <body>
   <h1>FPL Predictions</h1>
 
-  <!-- Tabs -->
   <div class="tabs">
     <div class="tab active" onclick="switchTab('data_1w.json', this)">1 Week</div>
     <div class="tab" onclick="switchTab('data_3w.json', this)">3 Weeks</div>
     <div class="tab" onclick="switchTab('data_5w.json', this)">5 Weeks</div>
   </div>
 
-  <!-- Filters -->
   <input type="text" id="nameFilter" placeholder="Filter by player name">
   <input type="text" id="teamFilter" placeholder="Filter by team">
   <input type="text" id="positionFilter" placeholder="Filter by position (GK/DEF/MID/FWD)">
   <input type="number" id="minutesFilter" placeholder="Min minutes played">
 
-  <!-- Timestamp -->
   <p id="lastUpdated"></p>
 
-  <!-- Table -->
   <table id="fpl-table">
     <thead id="table-head"></thead>
     <tbody id="results"></tbody>
@@ -54,10 +49,9 @@
   <script>
     let data = [];
     let filteredData = [];
-    let sortDirection = 1;
     let columns = [];
     let currentSortColumn = null;
-    let currentSortDirection = 1;
+    let currentSortDirection = 1; // 1 = asc, -1 = desc
 
     const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
@@ -75,7 +69,17 @@
           "Last updated: " + new Date().toLocaleString();
       }
 
-      columns = Object.keys(data[0]);
+      // Build column list, remove m4 + blank, reorder points_adj
+      let cols = Object.keys(data[0]).filter(c => c !== "m4" && c.trim() !== "");
+
+      if (cols.includes("points") && cols.includes("points_adj")) {
+        cols = cols.filter(c => c !== "points_adj");
+        const pointsIndex = cols.indexOf("points");
+        cols.splice(pointsIndex + 1, 0, "points_adj");
+      }
+
+      columns = cols;
+
       filteredData = [...data];
       renderHeader();
       renderTable(filteredData);
@@ -109,7 +113,6 @@
             }).join('')}
           </tr>`
         ).join('');
-      renderHeader();
     }
 
     function applyFilters() {
@@ -133,17 +136,25 @@
     document.getElementById('minutesFilter').addEventListener('input', applyFilters);
 
     function sortTable(column) {
-      currentSortColumn = column;
-      currentSortDirection = sortDirection;
+      if (currentSortColumn === column) {
+        currentSortDirection *= -1; // flip
+      } else {
+        currentSortColumn = column;
+        currentSortDirection = 1; // new column → ascending
+      }
 
       filteredData.sort((a, b) => {
-        const valA = a[column], valB = b[column];
+        const valA = a[column];
+        const valB = b[column];
+
         if (typeof valA === 'number' && typeof valB === 'number') {
-          return (valA - valB) * sortDirection;
+          return (valA - valB) * currentSortDirection;
         }
-        return (valA > valB ? 1 : -1) * sortDirection;
+        if (valA === valB) return 0;
+        return (valA > valB ? 1 : -1) * currentSortDirection;
       });
-      sortDirection *= -1;
+
+      renderHeader();
       renderTable(filteredData);
     }
 
@@ -152,13 +163,13 @@
       el.classList.add('active');
       await loadData(file);
       applyFilters();
-      if (currentSortColumn) {
-        sortDirection = currentSortDirection;
-        sortTable(currentSortColumn);
-      }
+
+      // Optional: reset sort when switching tabs
+      currentSortColumn = null;
+      currentSortDirection = 1;
+      renderHeader();
     }
 
-    /* ✅ Highlight row on click/tap */
     function highlightRow(index) {
       const table = document.getElementById('results');
       const rows = table.getElementsByTagName('tr');
