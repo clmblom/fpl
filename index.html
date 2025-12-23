@@ -3,28 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <title>FPL Predictions</title>
+
   <style>
     body { font-family: Arial, sans-serif; }
     .tabs { display: flex; margin-bottom: 10px; }
     .tab { padding: 10px; cursor: pointer; border: 1px solid #ccc; }
     .tab.active { background: #f2f2f2; font-weight: bold; }
+
     table { border-collapse: collapse; width: 100%; font-size: 12px; overflow-x: auto; display: block; }
-    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; white-space: nowrap; }
+    th, td { border: 1px solid #ccc; padding: 4px; white-space: nowrap; }
     th { cursor: pointer; background: #f9f9f9; }
     th.sorted-asc::after { content: " ↑"; }
     th.sorted-desc::after { content: " ↓"; }
+
     input { margin: 5px; padding: 5px; }
     #lastUpdated { margin: 10px 0; font-style: italic; color: #555; }
 
-    .selected-row {
-      background-color: #fff3cd !important;
-    }
-
-    #results tr:nth-child(even):not(.selected-row) {
-      background-color: #f7f7f7;
-    }
+    .selected-row { background-color: #fff3cd !important; }
+    #results tr:nth-child(even):not(.selected-row) { background-color: #f7f7f7; }
   </style>
 </head>
+
 <body>
   <h1>FPL Predictions</h1>
 
@@ -34,157 +33,173 @@
     <div class="tab" onclick="switchTab('data_5w.json', this)">5 Weeks</div>
   </div>
 
+  <!-- Filters -->
   <input type="text" id="nameFilter" placeholder="Filter by player name">
   <input type="text" id="teamFilter" placeholder="Filter by team">
-  <input type="text" id="positionFilter" placeholder="Filter by position (GK/DEF/MID/FWD)">
-  <input type="number" id="minutesFilter" placeholder="Min minutes played">
+  <input type="text" id="positionFilter" placeholder="Position (GK/DEF/MID/FWD)">
+  <input type="number" id="minutesFilter" placeholder="Min minutes">
+  <input type="number" id="pointsFilter" placeholder="Min points">
 
   <p id="lastUpdated"></p>
 
-  <table id="fpl-table">
+  <table>
     <thead id="table-head"></thead>
     <tbody id="results"></tbody>
   </table>
 
-  <script>
-    let data = [];
-    let filteredData = [];
-    let columns = [];
-    let currentSortColumn = null;
-    let currentSortDirection = 1; // 1 = asc, -1 = desc
+<script>
+let rawData = [];
+let filteredData = [];
+let columns = [];
 
-    const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
+let currentSortColumn = null;
+let currentSortDirection = 1; // 1 = asc, -1 = desc
 
-    async function loadData(file) {
-      const response = await fetch(file);
-      const json = await response.json();
+const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
-      if (json.metadata && json.metadata.last_updated) {
-        document.getElementById("lastUpdated").textContent =
-          "Last updated: " + new Date(json.metadata.last_updated).toLocaleString();
-        data = json.records;
-      } else {
-        data = json;
-        document.getElementById("lastUpdated").textContent =
-          "Last updated: " + new Date().toLocaleString();
-      }
 
-      // Build column list, remove m4 + blank, reorder points_adj
-      let cols = Object.keys(data[0]).filter(c => c !== "m4" && c.trim() !== "");
+// ------------------------------
+// LOAD + PREP DATA
+// ------------------------------
+async function loadData(file) {
+  const response = await fetch(file);
+  const json = await response.json();
 
-      if (cols.includes("points") && cols.includes("points_adj")) {
-        cols = cols.filter(c => c !== "points_adj");
-        const pointsIndex = cols.indexOf("points");
-        cols.splice(pointsIndex + 1, 0, "points_adj");
-      }
+  rawData = json.records ?? json;
 
-      columns = cols;
+  document.getElementById("lastUpdated").textContent =
+    "Last updated: " + new Date().toLocaleString();
 
-      filteredData = [...data];
-      renderHeader();
-      renderTable(filteredData);
-    }
+  // Build clean column list
+  columns = Object.keys(rawData[0])
+    .filter(c => c !== "m4" && c.trim() !== "");
 
-    function renderHeader() {
-      document.getElementById('table-head').innerHTML =
-        `<tr>${columns.map(c => {
-          let cls = "";
-          if (c === currentSortColumn) {
-            cls = currentSortDirection === 1 ? "sorted-asc" : "sorted-desc";
-          }
-          return `<th class="${cls}" onclick="sortTable('${c}')">${c}</th>`;
-        }).join('')}</tr>`;
-    }
+  // Move points_adj next to points
+  if (columns.includes("points") && columns.includes("points_adj")) {
+    columns = columns.filter(c => c !== "points_adj");
+    const i = columns.indexOf("points");
+    columns.splice(i + 1, 0, "points_adj");
+  }
 
-    function renderTable(rows) {
-      document.getElementById('results').innerHTML =
-        rows.map((r, idx) =>
-          `<tr data-index="${idx}" onclick="highlightRow(${idx})">
-            ${columns.map(c => {
-              let val = r[c];
-              if (c === "position") {
-                val = positionMap[val] || val;
-              } else if (c === "minutes") {
-                val = Math.round(val);
-              } else if (typeof val === 'number') {
-                val = Number(val).toFixed(2);
-              }
-              return `<td>${val}</td>`;
-            }).join('')}
-          </tr>`
-        ).join('');
-    }
+  applyFilters();
+  applySort();
+  renderHeader();
+  renderTable();
+}
 
-    function applyFilters() {
-      const nameQ = document.getElementById('nameFilter').value.toLowerCase();
-      const teamQ = document.getElementById('teamFilter').value.toLowerCase();
-      const posQ = document.getElementById('positionFilter').value.toLowerCase();
-      const minMinutes = parseInt(document.getElementById('minutesFilter').value) || 0;
 
-      filteredData = data.filter(item =>
-        item.web_name.toLowerCase().includes(nameQ) &&
-        item.team.toLowerCase().includes(teamQ) &&
-        String(positionMap[item.position] || item.position).toLowerCase().includes(posQ) &&
-        item.minutes >= minMinutes
-      );
-      renderTable(filteredData);
-    }
+// ------------------------------
+// FILTERING
+// ------------------------------
+function applyFilters() {
+  const nameQ = document.getElementById('nameFilter').value.toLowerCase();
+  const teamQ = document.getElementById('teamFilter').value.toLowerCase();
+  const posQ = document.getElementById('positionFilter').value.toLowerCase();
+  const minMinutes = parseInt(document.getElementById('minutesFilter').value) || 0;
+  const minPoints = parseFloat(document.getElementById('pointsFilter').value) || 0;
 
-    document.getElementById('nameFilter').addEventListener('input', applyFilters);
-    document.getElementById('teamFilter').addEventListener('input', applyFilters);
-    document.getElementById('positionFilter').addEventListener('input', applyFilters);
-    document.getElementById('minutesFilter').addEventListener('input', applyFilters);
+  filteredData = rawData.filter(item =>
+    item.web_name.toLowerCase().includes(nameQ) &&
+    item.team.toLowerCase().includes(teamQ) &&
+    (positionMap[item.position] || "").toLowerCase().includes(posQ) &&
+    item.minutes >= minMinutes &&
+    item.points >= minPoints
+  );
+}
 
-    function sortTable(column) {
-      if (currentSortColumn === column) {
-        currentSortDirection *= -1; // flip
-      } else {
-        currentSortColumn = column;
-        currentSortDirection = 1; // new column → ascending
-      }
-
-      filteredData.sort((a, b) => {
-        const valA = a[column];
-        const valB = b[column];
-
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return (valA - valB) * currentSortDirection;
-        }
-        if (valA === valB) return 0;
-        return (valA > valB ? 1 : -1) * currentSortDirection;
-      });
-
-      renderHeader();
-      renderTable(filteredData);
-    }
-
-    async function switchTab(file, el) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      el.classList.add('active');
-      await loadData(file);
+["nameFilter", "teamFilter", "positionFilter", "minutesFilter", "pointsFilter"]
+  .forEach(id => {
+    document.getElementById(id).addEventListener("input", () => {
       applyFilters();
+      applySort();
+      renderTable();
+    });
+  });
 
-      // Optional: reset sort when switching tabs
-      currentSortColumn = null;
-      currentSortDirection = 1;
-      renderHeader();
+
+// ------------------------------
+// SORTING
+// ------------------------------
+function sortTable(column) {
+  if (currentSortColumn === column) {
+    currentSortDirection *= -1; // flip
+  } else {
+    currentSortColumn = column;
+    currentSortDirection = 1; // new column → ascending
+  }
+
+  applySort();
+  renderHeader();
+  renderTable();
+}
+
+function applySort() {
+  if (!currentSortColumn) return;
+
+  filteredData.sort((a, b) => {
+    const A = a[currentSortColumn];
+    const B = b[currentSortColumn];
+
+    if (typeof A === "number" && typeof B === "number") {
+      return (A - B) * currentSortDirection;
     }
+    return (A > B ? 1 : -1) * currentSortDirection;
+  });
+}
 
-    function highlightRow(index) {
-      const table = document.getElementById('results');
-      const rows = table.getElementsByTagName('tr');
 
-      for (let r of rows) {
-        r.classList.remove('selected-row');
+// ------------------------------
+// RENDERING
+// ------------------------------
+function renderHeader() {
+  document.getElementById("table-head").innerHTML =
+    `<tr>${columns.map(c => {
+      let cls = "";
+      if (c === currentSortColumn) {
+        cls = currentSortDirection === 1 ? "sorted-asc" : "sorted-desc";
       }
+      return `<th class="${cls}" onclick="sortTable('${c}')">${c}</th>`;
+    }).join("")}</tr>`;
+}
 
-      const selected = rows[index];
-      if (selected) {
-        selected.classList.add('selected-row');
-      }
-    }
+function renderTable() {
+  document.getElementById("results").innerHTML =
+    filteredData.map((row, idx) => `
+      <tr onclick="highlightRow(${idx})">
+        ${columns.map(c => {
+          let val = row[c];
+          if (c === "position") val = positionMap[val] || val;
+          if (c === "minutes") val = Math.round(val);
+          if (typeof val === "number") val = val.toFixed(2);
+          return `<td>${val}</td>`;
+        }).join("")}
+      </tr>
+    `).join("");
+}
 
-    loadData('data_1w.json');
-  </script>
+function highlightRow(i) {
+  const rows = document.querySelectorAll("#results tr");
+  rows.forEach(r => r.classList.remove("selected-row"));
+  if (rows[i]) rows[i].classList.add("selected-row");
+}
+
+
+// ------------------------------
+// TAB SWITCHING
+// ------------------------------
+async function switchTab(file, el) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+
+  await loadData(file);
+}
+
+
+// ------------------------------
+// INIT
+// ------------------------------
+loadData("data_1w.json");
+
+</script>
 </body>
 </html>
