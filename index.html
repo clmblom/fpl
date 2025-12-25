@@ -20,7 +20,11 @@
     #lastUpdated { margin: 10px 0; font-style: italic; color: #555; }
 
     .selected-row { background-color: #fff3cd !important; }
-    #results tr:nth-child(even):not(.selected-row) { background-color: #f7f7f7; }
+    .team-highlight { background-color: #d1ffd1 !important; }
+
+    #results tr:nth-child(even):not(.selected-row):not(.team-highlight) {
+      background-color: #f7f7f7;
+    }
   </style>
 </head>
 
@@ -32,6 +36,10 @@
     <div class="tab" onclick="switchTab('data_3w.json', this)">3 Weeks</div>
     <div class="tab" onclick="switchTab('data_5w.json', this)">5 Weeks</div>
   </div>
+
+  <!-- Team toggles -->
+  <label><input type="checkbox" id="teamCBox"> Team C</label>
+  <label><input type="checkbox" id="teamJBox"> Team J</label>
 
   <!-- Filters -->
   <input type="text"   id="nameFilter"     placeholder="Filter by player name">
@@ -58,7 +66,11 @@
   let currentSortColumn = null;
   let currentSortDirection = 1;
 
-  let selectedPlayerId = null;  // ⭐ stable highlight key
+  let selectedPlayerId = null;
+
+  let teamC = [];
+  let teamJ = [];
+  let activeTeam = null;
 
   const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
@@ -70,7 +82,21 @@
 
 
   // ------------------------------
-  // LOAD DATA
+  // LOAD TEAM FILES (C & J)
+  // ------------------------------
+  async function loadTeams() {
+    const c = await fetch("C.json").then(r => r.json());
+    const j = await fetch("J.json").then(r => r.json());
+
+    teamC = c.records ?? c;
+    teamJ = j.records ?? j;
+  }
+
+  loadTeams();
+
+
+  // ------------------------------
+  // LOAD MAIN DATA
   // ------------------------------
   async function loadData(file) {
     const response = await fetch(file);
@@ -78,12 +104,13 @@
 
     rawData = json.records ?? json;
 
-    $("lastUpdated").textContent =
-      "Last updated: " + new Date().toLocaleString();
+    // Use metadata timestamp
+    if (json.metadata?.last_updated) {
+      $("lastUpdated").textContent = "Last updated: " + json.metadata.last_updated;
+    }
 
-    // Build clean column list
-    columns = Object.keys(rawData[0])
-      .filter(c => c !== "m4" && c !== "player_id" && c.trim() !== "");
+    // Build column list (no m4, no blank filtering)
+    columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
 
     // Move points_adj next to points
     if (columns.includes("points") && columns.includes("points_adj")) {
@@ -189,17 +216,18 @@
       `).join("");
 
     applyHighlight();
+    applyTeamHighlight();
   }
 
 
   // ------------------------------
-  // HIGHLIGHTING
+  // MANUAL HIGHLIGHT
   // ------------------------------
   function highlightRow(index) {
     const row = filteredData[index];
     if (!row) return;
 
-    selectedPlayerId = row.player_id;  // ⭐ stable ID
+    selectedPlayerId = row.player_id;
     applyHighlight();
   }
 
@@ -214,6 +242,46 @@
       rows[index].classList.add("selected-row");
     }
   }
+
+
+  // ------------------------------
+  // TEAM HIGHLIGHTING (C / J)
+  // ------------------------------
+  function applyTeamHighlight() {
+    const rows = document.querySelectorAll("#results tr");
+    rows.forEach(r => r.classList.remove("team-highlight"));
+
+    if (!activeTeam) return;
+
+    const teamList = activeTeam === "C" ? teamC : teamJ;
+    const ids = new Set(teamList.map(p => p.player_id));
+
+    filteredData.forEach((row, i) => {
+      if (ids.has(row.player_id)) {
+        rows[i].classList.add("team-highlight");
+      }
+    });
+  }
+
+  $("teamCBox").addEventListener("change", () => {
+    if ($("teamCBox").checked) {
+      $("teamJBox").checked = false;
+      activeTeam = "C";
+    } else {
+      activeTeam = null;
+    }
+    applyTeamHighlight();
+  });
+
+  $("teamJBox").addEventListener("change", () => {
+    if ($("teamJBox").checked) {
+      $("teamCBox").checked = false;
+      activeTeam = "J";
+    } else {
+      activeTeam = null;
+    }
+    applyTeamHighlight();
+  });
 
 
   // ------------------------------
