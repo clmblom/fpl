@@ -25,6 +25,17 @@
     #results tr:nth-child(even):not(.selected-row):not(.team-highlight) {
       background-color: #f7f7f7;
     }
+
+    /* Team table styling similar to main table */
+    #teamTable {
+      display: none;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    #teamTable tr:nth-child(even) {
+      background-color: #f7fff7;
+    }
   </style>
 </head>
 
@@ -50,6 +61,14 @@
 
   <p id="lastUpdated"></p>
 
+  <!-- TEAM TABLE (full team, not filtered, independently sortable) -->
+  <h2 id="teamTitle" style="display:none;">Selected Team</h2>
+  <table id="teamTable">
+    <thead id="team-head"></thead>
+    <tbody id="team-body"></tbody>
+  </table>
+
+  <!-- MAIN TABLE -->
   <table>
     <thead id="table-head"></thead>
     <tbody id="results"></tbody>
@@ -65,6 +84,10 @@
 
   let currentSortColumn = null;
   let currentSortDirection = 1;
+
+  // Separate sorting for team table
+  let teamSortColumn = null;
+  let teamSortDirection = 1;
 
   let selectedPlayerId = null;
 
@@ -109,7 +132,7 @@
       $("lastUpdated").textContent = "Last updated: " + json.metadata.last_updated;
     }
 
-    // Build column list (no m4, no blank filtering)
+    // Build column list (no player_id)
     columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
 
     // Move points_adj next to points
@@ -123,11 +146,12 @@
     applySort();
     renderHeader();
     renderTable();
+    renderTeamTable(); // keep team table in sync on data load/tab switch
   }
 
 
   // ------------------------------
-  // FILTERING
+  // FILTERING (MAIN TABLE ONLY)
   // ------------------------------
   function applyFilters() {
     const nameQ = $("nameFilter").value.toLowerCase();
@@ -151,12 +175,13 @@
         applyFilters();
         applySort();
         renderTable();
+        // team table uses its own sorting and rawData; no need to change here
       });
     });
 
 
   // ------------------------------
-  // SORTING
+  // SORTING MAIN TABLE
   // ------------------------------
   function sortTable(column) {
     if (currentSortColumn === column) {
@@ -188,7 +213,7 @@
 
 
   // ------------------------------
-  // RENDERING
+  // RENDERING MAIN TABLE
   // ------------------------------
   function renderHeader() {
     $("table-head").innerHTML =
@@ -245,7 +270,7 @@
 
 
   // ------------------------------
-  // TEAM HIGHLIGHTING (C / J)
+  // TEAM HIGHLIGHTING (C / J) IN MAIN TABLE
   // ------------------------------
   function applyTeamHighlight() {
     const rows = document.querySelectorAll("#results tr");
@@ -271,6 +296,7 @@
       activeTeam = null;
     }
     applyTeamHighlight();
+    renderTeamTable(); // show/hide/update team table
   });
 
   $("teamJBox").addEventListener("change", () => {
@@ -281,7 +307,85 @@
       activeTeam = null;
     }
     applyTeamHighlight();
+    renderTeamTable(); // show/hide/update team table
   });
+
+
+  // ------------------------------
+  // TEAM TABLE (FULL TEAM, OWN SORTING)
+  // ------------------------------
+  function renderTeamTable() {
+    const teamTitle = $("teamTitle");
+    const teamTable = $("teamTable");
+
+    if (!activeTeam) {
+      teamTitle.style.display = "none";
+      teamTable.style.display = "none";
+      $("team-head").innerHTML = "";
+      $("team-body").innerHTML = "";
+      return;
+    }
+
+    const teamList = activeTeam === "C" ? teamC : teamJ;
+    const ids = new Set(teamList.map(p => p.player_id));
+
+    // Use rawData so the team table is NOT filtered
+    let teamData = rawData.filter(p => ids.has(p.player_id));
+
+    // Apply team-specific sort (independent of main table)
+    if (teamSortColumn) {
+      teamData.sort((a, b) => {
+        const A = a[teamSortColumn];
+        const B = b[teamSortColumn];
+
+        if (typeof A === "number" && typeof B === "number") {
+          return (A - B) * teamSortDirection;
+        }
+        if (A === B) return 0;
+        return (A > B ? 1 : -1) * teamSortDirection;
+      });
+    }
+
+    // Show title + table
+    teamTitle.textContent = `Team ${activeTeam}`;
+    teamTitle.style.display = "block";
+    teamTable.style.display = "block";
+
+    // Header (clickable, independent sort)
+    $("team-head").innerHTML =
+      `<tr>${columns.map(c => {
+        let cls = "";
+        if (c === teamSortColumn) {
+          cls = teamSortDirection === 1 ? "sorted-asc" : "sorted-desc";
+        }
+        return `<th class="${cls}" onclick="sortTeamTable('${c}')">${c}</th>`;
+      }).join("")}</tr>`;
+
+    // Body
+    $("team-body").innerHTML =
+      teamData.map(row => `
+        <tr class="team-highlight">
+          ${columns.map(c => {
+            let val = row[c];
+            if (c === "position") val = positionMap[val] || val;
+            else if (c === "minutes") val = Math.round(val);
+            else if (typeof val === "number") val = val.toFixed(2);
+            return `<td>${val}</td>`;
+          }).join("")}
+        </tr>
+      `).join("");
+  }
+
+  function sortTeamTable(column) {
+    if (teamSortColumn === column) {
+      teamSortDirection *= -1;
+    } else {
+      teamSortColumn = column;
+      teamSortDirection = 1;
+    }
+
+    renderTeamTable();
+  }
 
 
   // ------------------------------
@@ -292,6 +396,7 @@
     el.classList.add("active");
 
     await loadData(file);
+    renderTeamTable(); // keep team table synced on tab change
   }
 
 
