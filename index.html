@@ -22,19 +22,14 @@
     .selected-row { background-color: #fff3cd !important; }
     .team-highlight { background-color: #d1ffd1 !important; }
 
-    #results tr:nth-child(even):not(.selected-row):not(.team-highlight) {
+    #results tr:nth-child(even):not(.selected-row):not(.team-highlight):not(.separator-row) {
       background-color: #f7f7f7;
     }
 
-    /* Team table styling similar to main table */
-    #teamTable {
-      display: none;
-      width: 100%;
-      margin-bottom: 15px;
-    }
-
-    #teamTable tr:nth-child(even) {
-      background-color: #f7fff7;
+    .separator-row td {
+      background: #ddd !important;
+      font-weight: bold;
+      text-align: center;
     }
   </style>
 </head>
@@ -61,33 +56,18 @@
 
   <p id="lastUpdated"></p>
 
-  <!-- TEAM TABLE (full team, not filtered, independently sortable) -->
-  <h2 id="teamTitle" style="display:none;">Selected Team</h2>
-  <table id="teamTable">
-    <thead id="team-head"></thead>
-    <tbody id="team-body"></tbody>
-  </table>
-
-  <!-- MAIN TABLE -->
   <table>
     <thead id="table-head"></thead>
     <tbody id="results"></tbody>
   </table>
 
 <script>
-  // ------------------------------
-  // STATE
-  // ------------------------------
   let rawData = [];
   let filteredData = [];
   let columns = [];
 
   let currentSortColumn = null;
   let currentSortDirection = 1;
-
-  // Separate sorting for team table
-  let teamSortColumn = null;
-  let teamSortDirection = 1;
 
   let selectedPlayerId = null;
 
@@ -97,45 +77,28 @@
 
   const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
-
-  // ------------------------------
-  // HELPERS
-  // ------------------------------
   function $(id) { return document.getElementById(id); }
 
-
-  // ------------------------------
-  // LOAD TEAM FILES (C & J)
-  // ------------------------------
   async function loadTeams() {
     const c = await fetch("C.json").then(r => r.json());
     const j = await fetch("J.json").then(r => r.json());
-
     teamC = c.records ?? c;
     teamJ = j.records ?? j;
   }
-
   loadTeams();
 
-
-  // ------------------------------
-  // LOAD MAIN DATA
-  // ------------------------------
   async function loadData(file) {
     const response = await fetch(file);
     const json = await response.json();
 
     rawData = json.records ?? json;
 
-    // Use metadata timestamp
     if (json.metadata?.last_updated) {
       $("lastUpdated").textContent = "Last updated: " + json.metadata.last_updated;
     }
 
-    // Build column list (no player_id)
     columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
 
-    // Move points_adj next to points
     if (columns.includes("points") && columns.includes("points_adj")) {
       columns = columns.filter(c => c !== "points_adj");
       const i = columns.indexOf("points");
@@ -146,13 +109,8 @@
     applySort();
     renderHeader();
     renderTable();
-    renderTeamTable(); // keep team table in sync on data load/tab switch
   }
 
-
-  // ------------------------------
-  // FILTERING (MAIN TABLE ONLY)
-  // ------------------------------
   function applyFilters() {
     const nameQ = $("nameFilter").value.toLowerCase();
     const teamQ = $("teamFilter").value.toLowerCase();
@@ -175,14 +133,9 @@
         applyFilters();
         applySort();
         renderTable();
-        // team table uses its own sorting and rawData; no need to change here
       });
     });
 
-
-  // ------------------------------
-  // SORTING MAIN TABLE
-  // ------------------------------
   function sortTable(column) {
     if (currentSortColumn === column) {
       currentSortDirection *= -1;
@@ -190,7 +143,6 @@
       currentSortColumn = column;
       currentSortDirection = 1;
     }
-
     applySort();
     renderHeader();
     renderTable();
@@ -199,37 +151,47 @@
   function applySort() {
     if (!currentSortColumn) return;
 
-    filteredData.sort((a, b) => {
+    const sorter = (a, b) => {
       const A = a[currentSortColumn];
       const B = b[currentSortColumn];
-
-      if (typeof A === "number" && typeof B === "number") {
-        return (A - B) * currentSortDirection;
-      }
+      if (typeof A === "number" && typeof B === "number") return (A - B) * currentSortDirection;
       if (A === B) return 0;
       return (A > B ? 1 : -1) * currentSortDirection;
-    });
+    };
+
+    filteredData.sort(sorter);
   }
 
-
-  // ------------------------------
-  // RENDERING MAIN TABLE
-  // ------------------------------
   function renderHeader() {
     $("table-head").innerHTML =
       `<tr>${columns.map(c => {
         let cls = "";
-        if (c === currentSortColumn) {
-          cls = currentSortDirection === 1 ? "sorted-asc" : "sorted-desc";
-        }
+        if (c === currentSortColumn) cls = currentSortDirection === 1 ? "sorted-asc" : "sorted-desc";
         return `<th class="${cls}" onclick="sortTable('${c}')">${c}</th>`;
       }).join("")}</tr>`;
   }
 
   function renderTable() {
-    $("results").innerHTML =
-      filteredData.map((row, idx) => `
-        <tr onclick="highlightRow(${idx})">
+    let html = "";
+
+    if (activeTeam) {
+      const teamList = activeTeam === "C" ? teamC : teamJ;
+      const ids = new Set(teamList.map(p => p.player_id));
+
+      let teamRows = rawData.filter(p => ids.has(p.player_id));
+
+      if (currentSortColumn) {
+        teamRows.sort((a, b) => {
+          const A = a[currentSortColumn];
+          const B = b[currentSortColumn];
+          if (typeof A === "number" && typeof B === "number") return (A - B) * currentSortDirection;
+          if (A === B) return 0;
+          return (A > B ? 1 : -1) * currentSortDirection;
+        });
+      }
+
+      html += teamRows.map(row => `
+        <tr class="team-highlight">
           ${columns.map(c => {
             let val = row[c];
             if (c === "position") val = positionMap[val] || val;
@@ -240,18 +202,30 @@
         </tr>
       `).join("");
 
+      html += `<tr class="separator-row"><td colspan="${columns.length}">— End of Team ${activeTeam} —</td></tr>`;
+    }
+
+    html += filteredData.map((row, idx) => `
+      <tr onclick="highlightRow(${idx})">
+        ${columns.map(c => {
+          let val = row[c];
+          if (c === "position") val = positionMap[val] || val;
+          else if (c === "minutes") val = Math.round(val);
+          else if (typeof val === "number") val = val.toFixed(2);
+          return `<td>${val}</td>`;
+        }).join("")}
+      </tr>
+    `).join("");
+
+    $("results").innerHTML = html;
+
     applyHighlight();
     applyTeamHighlight();
   }
 
-
-  // ------------------------------
-  // MANUAL HIGHLIGHT
-  // ------------------------------
   function highlightRow(index) {
     const row = filteredData[index];
     if (!row) return;
-
     selectedPlayerId = row.player_id;
     applyHighlight();
   }
@@ -263,15 +237,18 @@
     if (selectedPlayerId === null) return;
 
     const index = filteredData.findIndex(r => r.player_id === selectedPlayerId);
-    if (index !== -1 && rows[index]) {
-      rows[index].classList.add("selected-row");
+
+    let offset = 0;
+    if (activeTeam) {
+      const teamList = activeTeam === "C" ? teamC : teamJ;
+      offset = teamList.length + 1;
     }
+
+    const rowEl = rows[index + offset];
+    if (rowEl) rowEl.classList.add("selected-row");
   }
 
-
-  // ------------------------------
-  // TEAM HIGHLIGHTING (C / J) IN MAIN TABLE
-  // ------------------------------
+  // ⭐ FIXED: Highlight team players in BOTH sections
   function applyTeamHighlight() {
     const rows = document.querySelectorAll("#results tr");
     rows.forEach(r => r.classList.remove("team-highlight"));
@@ -281,9 +258,17 @@
     const teamList = activeTeam === "C" ? teamC : teamJ;
     const ids = new Set(teamList.map(p => p.player_id));
 
+    let offset = teamList.length + 1;
+
+    // Highlight team rows at the top
+    for (let i = 0; i < teamList.length; i++) {
+      rows[i].classList.add("team-highlight");
+    }
+
+    // Highlight matching players in the main list
     filteredData.forEach((row, i) => {
       if (ids.has(row.player_id)) {
-        rows[i].classList.add("team-highlight");
+        rows[i + offset].classList.add("team-highlight");
       }
     });
   }
@@ -292,117 +277,24 @@
     if ($("teamCBox").checked) {
       $("teamJBox").checked = false;
       activeTeam = "C";
-    } else {
-      activeTeam = null;
-    }
-    applyTeamHighlight();
-    renderTeamTable(); // show/hide/update team table
+    } else activeTeam = null;
+    renderTable();
   });
 
   $("teamJBox").addEventListener("change", () => {
     if ($("teamJBox").checked) {
       $("teamCBox").checked = false;
       activeTeam = "J";
-    } else {
-      activeTeam = null;
-    }
-    applyTeamHighlight();
-    renderTeamTable(); // show/hide/update team table
+    } else activeTeam = null;
+    renderTable();
   });
 
-
-  // ------------------------------
-  // TEAM TABLE (FULL TEAM, OWN SORTING)
-  // ------------------------------
-  function renderTeamTable() {
-    const teamTitle = $("teamTitle");
-    const teamTable = $("teamTable");
-
-    if (!activeTeam) {
-      teamTitle.style.display = "none";
-      teamTable.style.display = "none";
-      $("team-head").innerHTML = "";
-      $("team-body").innerHTML = "";
-      return;
-    }
-
-    const teamList = activeTeam === "C" ? teamC : teamJ;
-    const ids = new Set(teamList.map(p => p.player_id));
-
-    // Use rawData so the team table is NOT filtered
-    let teamData = rawData.filter(p => ids.has(p.player_id));
-
-    // Apply team-specific sort (independent of main table)
-    if (teamSortColumn) {
-      teamData.sort((a, b) => {
-        const A = a[teamSortColumn];
-        const B = b[teamSortColumn];
-
-        if (typeof A === "number" && typeof B === "number") {
-          return (A - B) * teamSortDirection;
-        }
-        if (A === B) return 0;
-        return (A > B ? 1 : -1) * teamSortDirection;
-      });
-    }
-
-    // Show title + table
-    teamTitle.textContent = `Team ${activeTeam}`;
-    teamTitle.style.display = "block";
-    teamTable.style.display = "block";
-
-    // Header (clickable, independent sort)
-    $("team-head").innerHTML =
-      `<tr>${columns.map(c => {
-        let cls = "";
-        if (c === teamSortColumn) {
-          cls = teamSortDirection === 1 ? "sorted-asc" : "sorted-desc";
-        }
-        return `<th class="${cls}" onclick="sortTeamTable('${c}')">${c}</th>`;
-      }).join("")}</tr>`;
-
-    // Body
-    $("team-body").innerHTML =
-      teamData.map(row => `
-        <tr class="team-highlight">
-          ${columns.map(c => {
-            let val = row[c];
-            if (c === "position") val = positionMap[val] || val;
-            else if (c === "minutes") val = Math.round(val);
-            else if (typeof val === "number") val = val.toFixed(2);
-            return `<td>${val}</td>`;
-          }).join("")}
-        </tr>
-      `).join("");
-  }
-
-  function sortTeamTable(column) {
-    if (teamSortColumn === column) {
-      teamSortDirection *= -1;
-    } else {
-      teamSortColumn = column;
-      teamSortDirection = 1;
-    }
-
-    renderTeamTable();
-  }
-
-
-  // ------------------------------
-  // TAB SWITCHING
-  // ------------------------------
   async function switchTab(file, el) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     el.classList.add("active");
-
     await loadData(file);
-    renderTeamTable(); // keep team table synced on tab change
   }
 
-
-  // ------------------------------
-  // INIT
-  // ------------------------------
   loadData("data_1w.json");
 </script>
 </body>
