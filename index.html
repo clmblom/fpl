@@ -44,8 +44,11 @@
   </div>
 
   <!-- Team toggles -->
+<div id="teamRow">
   <label><input type="checkbox" id="teamCBox"> Team C</label>
   <label><input type="checkbox" id="teamJBox"> Team J</label>
+</div>
+
 
   <!-- Filters -->
   <input type="text"   id="nameFilter"     placeholder="Filter by player name">
@@ -53,6 +56,7 @@
   <input type="text"   id="positionFilter" placeholder="Position (GK/DEF/MID/FWD)">
   <input type="number" id="minutesFilter"  placeholder="Min minutes">
   <input type="number" id="pointsFilter"   placeholder="Min points">
+  <input type="number" id="pointsAdjFilter" placeholder="Min adj points">
 
   <p id="lastUpdated"></p>
 
@@ -117,17 +121,21 @@
     const posQ  = $("positionFilter").value.toLowerCase();
     const minMinutes = parseInt($("minutesFilter").value) || 0;
     const minPoints  = parseFloat($("pointsFilter").value) || 0;
+    const minAdjPoints = parseFloat($("pointsAdjFilter").value) || 0;
+
 
     filteredData = rawData.filter(item =>
       item.web_name.toLowerCase().includes(nameQ) &&
       item.team.toLowerCase().includes(teamQ) &&
       (positionMap[item.position] || "").toLowerCase().includes(posQ) &&
       item.minutes >= minMinutes &&
-      item.points  >= minPoints
+      item.points  >= minPoints &&
+      item.points_adj >= minAdjPoints
+
     );
   }
 
-  ["nameFilter", "teamFilter", "positionFilter", "minutesFilter", "pointsFilter"]
+  ["nameFilter", "teamFilter", "positionFilter", "minutesFilter", "pointsFilter", "pointsAdjFilter"]
     .forEach(id => {
       $(id).addEventListener("input", () => {
         applyFilters();
