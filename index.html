@@ -51,13 +51,18 @@
 
 
   <!-- Filters -->
-  <input type="text"   id="nameFilter"     placeholder="Filter by player name">
-  <input type="text"   id="teamFilter"     placeholder="Filter by team">
+  <div id="playerRow">
+    <input type="text"   id="nameFilter"     placeholder="Filter by player name">
+    <input type="text"   id="teamFilter"     placeholder="Filter by team">
+  </div>
+  <div id="posRow">
   <input type="text"   id="positionFilter" placeholder="Position (GK/DEF/MID/FWD)">
   <input type="number" id="minutesFilter"  placeholder="Min minutes">
+  </div>
+  <div id="pointsRow">
   <input type="number" id="pointsFilter"   placeholder="Min points">
   <input type="number" id="pointsAdjFilter" placeholder="Min adj points">
-
+</div>
   <p id="lastUpdated"></p>
 
   <table>
@@ -102,6 +107,23 @@
     }
 
     columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
+
+const desiredOrder = [
+  "web_name",
+  "team",
+  "position",
+  "points",
+  "points_adj",
+  "minutes",
+  "cost"
+];
+
+// Put desired columns first (in that order), then everything else
+columns = [
+  ...desiredOrder.filter(c => columns.includes(c)),
+  ...columns.filter(c => !desiredOrder.includes(c))
+];
+
 
     if (columns.includes("points") && columns.includes("points_adj")) {
       columns = columns.filter(c => c !== "points_adj");
