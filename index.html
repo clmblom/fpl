@@ -6,10 +6,7 @@
 
   <style>
     body { font-family: Arial, sans-serif; }
-    .tabs { display: flex; margin-bottom: 10px; }
-    .tab { padding: 10px; cursor: pointer; border: 1px solid #ccc; }
-    .tab.active { background: #f2f2f2; font-weight: bold; }
-
+    .tabs { display: flex; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
     table { border-collapse: collapse; width: 100%; font-size: 12px; overflow-x: auto; display: block; }
     th, td { border: 1px solid #ccc; padding: 4px; white-space: nowrap; }
     th { cursor: pointer; background: #f9f9f9; }
@@ -37,32 +34,29 @@
 <body>
   <h1>FPL Predictions</h1>
 
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('data_1w.json', this)">1 Week</div>
-    <div class="tab" onclick="switchTab('data_3w.json', this)">3 Weeks</div>
-    <div class="tab" onclick="switchTab('data_5w.json', this)">5 Weeks</div>
-  </div>
+  <!-- GW CHECKBOXES -->
+  <div id="gwSelector" class="tabs"></div>
 
   <!-- Team toggles -->
-<div id="teamRow">
-  <label><input type="checkbox" id="teamCBox"> Team C</label>
-  <label><input type="checkbox" id="teamJBox"> Team J</label>
-</div>
-
+  <div id="teamRow">
+    <label><input type="checkbox" id="teamCBox"> Team C</label>
+    <label><input type="checkbox" id="teamJBox"> Team J</label>
+  </div>
 
   <!-- Filters -->
   <div id="playerRow">
-    <input type="text"   id="nameFilter"     placeholder="Filter by player name">
-    <input type="text"   id="teamFilter"     placeholder="Filter by team">
+    <input type="text" id="nameFilter" placeholder="Filter by player name">
+    <input type="text" id="teamFilter" placeholder="Filter by team">
   </div>
   <div id="posRow">
-  <input type="text"   id="positionFilter" placeholder="Position (GK/DEF/MID/FWD)">
-  <input type="number" id="minutesFilter"  placeholder="Min minutes">
+    <input type="text" id="positionFilter" placeholder="Position (GK/DEF/MID/FWD)">
+    <input type="number" id="minutesFilter" placeholder="Min minutes">
   </div>
   <div id="pointsRow">
-  <input type="number" id="pointsFilter"   placeholder="Min points">
-  <input type="number" id="pointsAdjFilter" placeholder="Min adj points">
-</div>
+    <input type="number" id="pointsFilter" placeholder="Min points">
+    <input type="number" id="pointsAdjFilter" placeholder="Min adj points">
+  </div>
+
   <p id="lastUpdated"></p>
 
   <table>
@@ -82,61 +76,158 @@
 
   let teamC = [];
   let teamJ = [];
-  let activeTeam = null;
+  let activeTeam = null;   // ⭐ START WITH NO TEAM SELECTED
 
   const positionMap = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
+
+  const protectedFields = new Set([
+    "player_id",
+    "web_name",
+    "team",
+    "position",
+    "minutes",
+    "cost"
+  ]);
 
   function $(id) { return document.getElementById(id); }
 
   async function loadTeams() {
     const c = await fetch("C.json").then(r => r.json());
     const j = await fetch("J.json").then(r => r.json());
-    teamC = c.records ?? c;
-    teamJ = j.records ?? j;
+    teamC = (c.records ?? c).map(p => ({ ...p, player_id: parseInt(p.player_id) }));
+    teamJ = (j.records ?? j).map(p => ({ ...p, player_id: parseInt(p.player_id) }));
   }
   loadTeams();
 
-  async function loadData(file) {
-    const response = await fetch(file);
-    const json = await response.json();
+  function gwFile(gw) { return `gw${gw}.json`; }
 
-    rawData = json.records ?? json;
+  // Load GW checkboxes
+  async function loadGWCheckboxes() {
+    const gwData = await fetch("gws.json").then(r => r.json());
+    const gws = gwData.gameweeks.sort((a, b) => a - b);
 
-    if (json.metadata?.last_updated) {
-      $("lastUpdated").textContent = "Last updated: " + json.metadata.last_updated;
+    const container = $("gwSelector");
+    container.innerHTML = "";
+
+    gws.forEach(gw => {
+      const label = document.createElement("label");
+      label.innerHTML = `<input type="checkbox" class="gwBox" value="${gw}"> GW${gw}`;
+      container.appendChild(label);
+    });
+
+    document.querySelectorAll(".gwBox").forEach(box =>
+      box.addEventListener("change", loadSelectedGWs)
+    );
+  }
+
+  loadGWCheckboxes();
+
+  // ⭐ ENSURE NO TEAM IS SELECTED AT STARTUP
+  window.addEventListener("DOMContentLoaded", () => {
+    $("teamCBox").checked = false;
+    $("teamJBox").checked = false;
+    activeTeam = null;
+  });
+
+  // Load + merge selected GWs
+  async function loadSelectedGWs() {
+    const selected = [...document.querySelectorAll(".gwBox:checked")]
+      .map(b => parseInt(b.value))
+      .sort((a, b) => a - b);
+
+    if (selected.length === 0) {
+      rawData = [];
+      filteredData = [];
+      columns = [];
+      $("table-head").innerHTML = "";
+      $("results").innerHTML = "";
+      $("lastUpdated").textContent = "";
+      selectedPlayerId = null;
+      return;
     }
 
-    columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
+    const datasets = await Promise.all(
+      selected.map(gw => fetch(gwFile(gw)).then(r => r.json()))
+    );
 
-const desiredOrder = [
-  "web_name",
-  "team",
-  "position",
-  "points",
-  "points_adj",
-  "minutes",
-  "cost"
-];
+    const records = datasets.map(d => d.records ?? d);
 
-// Put desired columns first (in that order), then everything else
-columns = [
-  ...desiredOrder.filter(c => columns.includes(c)),
-  ...columns.filter(c => !desiredOrder.includes(c))
-];
+    // last_updated from lowest GW
+    const firstMeta = datasets[0].metadata;
+    $("lastUpdated").textContent = firstMeta?.last_updated
+      ? "Last updated: " + firstMeta.last_updated
+      : "";
 
+    const merged = {};
 
-    if (columns.includes("points") && columns.includes("points_adj")) {
-      columns = columns.filter(c => c !== "points_adj");
-      const i = columns.indexOf("points");
-      columns.splice(i + 1, 0, "points_adj");
+    for (const weekData of records) {
+      for (const p of weekData) {
+        const pid = parseInt(p.player_id);
+
+        if (!merged[pid]) {
+          merged[pid] = {
+            ...p,
+            player_id: pid,
+            __gwCount: 1,
+            __pointsAdjSum: typeof p.points_adj === "number" ? p.points_adj : 0
+          };
+        } else {
+          const target = merged[pid];
+          target.__gwCount++;
+
+          for (const key of Object.keys(p)) {
+            const val = p[key];
+
+            if (key === "points_adj" && typeof val === "number") {
+              target.__pointsAdjSum += val;
+              continue;
+            }
+
+            if (protectedFields.has(key)) continue;
+
+            if (typeof val === "number") {
+              if (typeof target[key] !== "number") target[key] = 0;
+              target[key] += val;
+            }
+          }
+        }
+      }
+    }
+
+    rawData = Object.values(merged).map(p => {
+      p.points_adj = p.__pointsAdjSum / p.__gwCount;
+      delete p.__gwCount;
+      delete p.__pointsAdjSum;
+      return p;
+    });
+
+    if (rawData.length > 0) {
+      columns = Object.keys(rawData[0]).filter(c => c !== "player_id");
+
+      const desiredOrder = [
+        "web_name", "team", "position",
+        "points", "points_adj", "minutes", "cost"
+      ];
+
+      columns = [
+        ...desiredOrder.filter(c => columns.includes(c)),
+        ...columns.filter(c => !desiredOrder.includes(c))
+      ];
     }
 
     applyFilters();
+
+    if (selectedPlayerId !== null) {
+      const exists = filteredData.some(p => p.player_id === selectedPlayerId);
+      if (!exists) selectedPlayerId = null;
+    }
+
     applySort();
     renderHeader();
     renderTable();
   }
 
+  // Filters
   function applyFilters() {
     const nameQ = $("nameFilter").value.toLowerCase();
     const teamQ = $("teamFilter").value.toLowerCase();
@@ -145,7 +236,6 @@ columns = [
     const minPoints  = parseFloat($("pointsFilter").value) || 0;
     const minAdjPoints = parseFloat($("pointsAdjFilter").value) || 0;
 
-
     filteredData = rawData.filter(item =>
       item.web_name.toLowerCase().includes(nameQ) &&
       item.team.toLowerCase().includes(teamQ) &&
@@ -153,7 +243,6 @@ columns = [
       item.minutes >= minMinutes &&
       item.points  >= minPoints &&
       item.points_adj >= minAdjPoints
-
     );
   }
 
@@ -161,11 +250,18 @@ columns = [
     .forEach(id => {
       $(id).addEventListener("input", () => {
         applyFilters();
+
+        if (selectedPlayerId !== null) {
+          const exists = filteredData.some(p => p.player_id === selectedPlayerId);
+          if (!exists) selectedPlayerId = null;
+        }
+
         applySort();
         renderTable();
       });
     });
 
+  // Sorting
   function sortTable(column) {
     if (currentSortColumn === column) {
       currentSortDirection *= -1;
@@ -181,18 +277,21 @@ columns = [
   function applySort() {
     if (!currentSortColumn) return;
 
-    const sorter = (a, b) => {
+    filteredData.sort((a, b) => {
       const A = a[currentSortColumn];
       const B = b[currentSortColumn];
       if (typeof A === "number" && typeof B === "number") return (A - B) * currentSortDirection;
       if (A === B) return 0;
       return (A > B ? 1 : -1) * currentSortDirection;
-    };
-
-    filteredData.sort(sorter);
+    });
   }
 
   function renderHeader() {
+    if (!columns.length) {
+      $("table-head").innerHTML = "";
+      return;
+    }
+
     $("table-head").innerHTML =
       `<tr>${columns.map(c => {
         let cls = "";
@@ -201,42 +300,38 @@ columns = [
       }).join("")}</tr>`;
   }
 
+  // Table rendering
   function renderTable() {
     let html = "";
 
+    // TEAM BLOCK AT TOP
     if (activeTeam) {
       const teamList = activeTeam === "C" ? teamC : teamJ;
       const ids = new Set(teamList.map(p => p.player_id));
 
-      let teamRows = rawData.filter(p => ids.has(p.player_id));
+      const teamRows = filteredData.filter(p => ids.has(p.player_id));
 
-      if (currentSortColumn) {
-        teamRows.sort((a, b) => {
-          const A = a[currentSortColumn];
-          const B = b[currentSortColumn];
-          if (typeof A === "number" && typeof B === "number") return (A - B) * currentSortDirection;
-          if (A === B) return 0;
-          return (A > B ? 1 : -1) * currentSortDirection;
-        });
-      }
-
-      html += teamRows.map(row => `
-        <tr class="team-highlight">
-          ${columns.map(c => {
-            let val = row[c];
-            if (c === "position") val = positionMap[val] || val;
-            else if (c === "minutes") val = Math.round(val);
-            else if (typeof val === "number") val = val.toFixed(2);
-            return `<td>${val}</td>`;
-          }).join("")}
-        </tr>
-      `).join("");
-
+      html += teamRows.map(row => rowToHTML(row, true)).join("");
       html += `<tr class="separator-row"><td colspan="${columns.length}">— End of Team ${activeTeam} —</td></tr>`;
     }
 
-    html += filteredData.map((row, idx) => `
-      <tr onclick="highlightRow(${idx})">
+    // MAIN LIST (team players should ALSO appear here)
+    const mainRows = filteredData;
+
+    html += mainRows.map(row => rowToHTML(row, false)).join("");
+
+
+    $("results").innerHTML = html;
+
+    applyHighlight();
+    applyTeamHighlight();
+  }
+
+  function rowToHTML(row, isTeamRow) {
+    return `
+      <tr data-player-id="${row.player_id}"
+          class="${isTeamRow ? "team-highlight" : ""}"
+          onclick="highlightRowById(${row.player_id})">
         ${columns.map(c => {
           let val = row[c];
           if (c === "position") val = positionMap[val] || val;
@@ -245,18 +340,12 @@ columns = [
           return `<td>${val}</td>`;
         }).join("")}
       </tr>
-    `).join("");
-
-    $("results").innerHTML = html;
-
-    applyHighlight();
-    applyTeamHighlight();
+    `;
   }
 
-  function highlightRow(index) {
-    const row = filteredData[index];
-    if (!row) return;
-    selectedPlayerId = row.player_id;
+  // Highlighting
+  function highlightRowById(pid) {
+    selectedPlayerId = pid;
     applyHighlight();
   }
 
@@ -264,21 +353,12 @@ columns = [
     const rows = document.querySelectorAll("#results tr");
     rows.forEach(r => r.classList.remove("selected-row"));
 
-    if (selectedPlayerId === null) return;
+    if (!selectedPlayerId) return;
 
-    const index = filteredData.findIndex(r => r.player_id === selectedPlayerId);
-
-    let offset = 0;
-    if (activeTeam) {
-      const teamList = activeTeam === "C" ? teamC : teamJ;
-      offset = teamList.length + 1;
-    }
-
-    const rowEl = rows[index + offset];
-    if (rowEl) rowEl.classList.add("selected-row");
+    const row = [...rows].find(r => parseInt(r.dataset.playerId) === selectedPlayerId);
+    if (row) row.classList.add("selected-row");
   }
 
-  // ⭐ FIXED: Highlight team players in BOTH sections
   function applyTeamHighlight() {
     const rows = document.querySelectorAll("#results tr");
     rows.forEach(r => r.classList.remove("team-highlight"));
@@ -288,21 +368,13 @@ columns = [
     const teamList = activeTeam === "C" ? teamC : teamJ;
     const ids = new Set(teamList.map(p => p.player_id));
 
-    let offset = teamList.length + 1;
-
-    // Highlight team rows at the top
-    for (let i = 0; i < teamList.length; i++) {
-      rows[i].classList.add("team-highlight");
-    }
-
-    // Highlight matching players in the main list
-    filteredData.forEach((row, i) => {
-      if (ids.has(row.player_id)) {
-        rows[i + offset].classList.add("team-highlight");
-      }
+    rows.forEach(row => {
+      const pid = parseInt(row.dataset.playerId);
+      if (ids.has(pid)) row.classList.add("team-highlight");
     });
   }
 
+  // Team toggles
   $("teamCBox").addEventListener("change", () => {
     if ($("teamCBox").checked) {
       $("teamJBox").checked = false;
@@ -318,14 +390,6 @@ columns = [
     } else activeTeam = null;
     renderTable();
   });
-
-  async function switchTab(file, el) {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    el.classList.add("active");
-    await loadData(file);
-  }
-
-  loadData("data_1w.json");
 </script>
 </body>
 </html>
